@@ -109,6 +109,11 @@
         opacity: 0.8;
     }
     
+    /* Summary Badge Styling */
+    .summary-badge {
+        font-size: 0.9rem;
+        padding: 0.5em 0.75em;
+    }
   </style>
 </head>
 <body>
@@ -147,11 +152,27 @@
       <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-4" id="grid-container">
         <!-- Jadwal cards will be inserted here by JavaScript -->
       </div>
-
-      <div class="mt-4 pt-4 border-top d-flex justify-content-end">
-        <button id="simpan-button" class="btn btn-primary btn-lg">
-          <i class="bi bi-save me-2"></i>Simpan Absensi
-        </button>
+      
+      <!-- FITUR BARU: Ringkasan & Tombol Aksi -->
+      <div class="mt-4 pt-4 border-top">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
+          <!-- Bagian Ringkasan Absensi -->
+          <div id="summary-container" class="d-flex flex-wrap gap-2 justify-content-center">
+            <span class="badge text-bg-success summary-badge"><i class="bi bi-check-circle me-1"></i> Hadir: <span id="summary-hadir">0</span></span>
+            <span class="badge text-bg-warning summary-badge"><i class="bi bi-exclamation-triangle me-1"></i> Izin: <span id="summary-izin">0</span></span>
+            <span class="badge text-bg-info summary-badge"><i class="bi bi-bandaid me-1"></i> Sakit: <span id="summary-sakit">0</span></span>
+            <span class="badge text-bg-danger summary-badge"><i class="bi bi-x-circle me-1"></i> Alfa: <span id="summary-alfa">0</span></span>
+          </div>
+          <!-- Bagian Tombol Aksi -->
+          <div class="d-flex gap-2">
+            <button id="export-button" class="btn btn-outline-secondary">
+              <i class="bi bi-download me-2"></i>Ekspor CSV
+            </button>
+            <button id="simpan-button" class="btn btn-primary btn-lg">
+              <i class="bi bi-save me-2"></i>Simpan Absensi
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -188,7 +209,6 @@
         { jam: 7, guru: "Siti Rahma", mapel: "Pendidikan Agama" },
         { jam: 8, guru: "Herman Susilo", mapel: "Teknologi Jaringan" },
       ]
-      // Tambahkan data jadwal lain di sini...
     };
 
     // --- Inisialisasi Tampilan ---
@@ -207,7 +227,7 @@
 
     // --- Fungsionalitas Dropdown Kustom ---
     function populateDropdown() {
-        optionsContainer.innerHTML = ''; // Clear existing options
+        optionsContainer.innerHTML = '';
         daftarKelasJurusan.forEach(kj => {
             const optionEl = document.createElement("div");
             optionEl.textContent = kj;
@@ -233,7 +253,7 @@
       dropdownList.classList.add("show");
       filterInput.value = '';
       filterOptions('');
-      setTimeout(() => filterInput.focus(), 100); // Fokus setelah transisi
+      setTimeout(() => filterInput.focus(), 100);
     }
 
     function closeDropdown() {
@@ -270,13 +290,17 @@
       
       judulJadwal.innerHTML = `<i class="bi bi-table me-2"></i>Jadwal Kelas ${kelasJurusan}`;
       jadwalGrid.classList.remove("d-none");
-      setTimeout(() => jadwalGrid.classList.add("visible"), 10); // Trigger fade-in
+      setTimeout(() => jadwalGrid.classList.add("visible"), 10);
 
       data.forEach(item => {
         const col = document.createElement("div");
         col.className = "col";
+        // Menambahkan data-attributes untuk memudahkan pengambilan data saat ekspor
         col.innerHTML = `
-          <div class="card shadow-sm jadwal-card">
+          <div class="card shadow-sm jadwal-card" 
+               data-jam="${item.jam}" 
+               data-guru="${item.guru}" 
+               data-mapel="${item.mapel}">
             <div class="card-body status-hadir">
               <div class="d-flex justify-content-between align-items-center mb-2">
                 <h6 class="card-subtitle text-muted">Jam ke-${item.jam}</h6>
@@ -302,6 +326,7 @@
       });
 
       setupCardInteractions();
+      updateSummary(); // Panggil pertama kali untuk inisialisasi ringkasan
     }
 
     function setupCardInteractions() {
@@ -310,14 +335,11 @@
           const cardBody = e.target.closest('.card-body');
           const keteranganInput = cardBody.querySelector(".keterangan");
           
-          // Hapus kelas status lama
           cardBody.classList.remove("status-hadir", "status-izin", "status-sakit", "status-alfa");
           
-          // Tambah kelas status baru
           const statusMap = { "Hadir": "status-hadir", "Izin": "status-izin", "Sakit": "status-sakit", "Alfa": "status-alfa" };
           cardBody.classList.add(statusMap[e.target.value]);
           
-          // Tampilkan input keterangan
           if (e.target.value !== "Hadir") {
             keteranganInput.classList.remove("d-none");
             keteranganInput.focus();
@@ -325,19 +347,70 @@
             keteranganInput.classList.add("d-none");
             keteranganInput.value = "";
           }
+
+          updateSummary(); // Update ringkasan setiap kali ada perubahan
         });
       });
     }
 
-    // --- Event Listener Tombol Simpan ---
+    // --- FITUR BARU: Ringkasan Absensi ---
+    function updateSummary() {
+        const summary = { Hadir: 0, Izin: 0, Sakit: 0, Alfa: 0 };
+        document.querySelectorAll(".absen-dropdown").forEach(select => {
+            summary[select.value]++;
+        });
+
+        document.getElementById('summary-hadir').textContent = summary.Hadir;
+        document.getElementById('summary-izin').textContent = summary.Izin;
+        document.getElementById('summary-sakit').textContent = summary.Sakit;
+        document.getElementById('summary-alfa').textContent = summary.Alfa;
+    }
+
+    // --- FITUR BARU: Ekspor ke CSV ---
+    function exportToCSV() {
+        const kelasJurusan = searchInput.value;
+        if (!kelasJurusan) {
+            alert("Silakan pilih kelas terlebih dahulu.");
+            return;
+        }
+
+        let csvContent = "data:text/csv;charset=utf-8,";
+        const headers = ["Jam", "Guru", "Mata Pelajaran", "Status", "Keterangan"];
+        csvContent += headers.join(",") + "\r\n";
+
+        const rows = document.querySelectorAll(".jadwal-card");
+        rows.forEach(card => {
+            const jam = card.dataset.jam;
+            const guru = `"${card.dataset.guru}"`; // Bungkus dengan kutip untuk menangani koma
+            const mapel = `"${card.dataset.mapel}"`;
+            const status = card.querySelector(".absen-dropdown").value;
+            const keterangan = `"${card.querySelector(".keterangan").value}"`;
+
+            const row = [jam, guru, mapel, status, keterangan].join(",");
+            csvContent += row + "\r\n";
+        });
+        
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        
+        const tgl = new Date().toISOString().slice(0, 10);
+        link.setAttribute("download", `absensi_${kelasJurusan.replace(" ", "_")}_${tgl}.csv`);
+        document.body.appendChild(link);
+        
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    // --- Event Listener Tombol Aksi ---
     document.getElementById("simpan-button").addEventListener("click", () => {
-      // Logika untuk mengumpulkan data bisa ditambahkan di sini
       alert("Data absensi berhasil disimpan! (Simulasi)");
     });
     
+    document.getElementById("export-button").addEventListener("click", exportToCSV); // Tambahkan event listener untuk ekspor
+
     // --- Inisialisasi awal ---
     populateDropdown();
-
   </script>
 
 </body>
