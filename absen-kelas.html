@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Absensi Guru Harian (Auto-Save)</title>
+
+  <!-- Bootstrap 5.3 CSS & Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+  <!-- Google Fonts: Poppins -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bs-primary-rgb: 71, 85, 105; /* Slate 600 */
+      --bs-body-bg: #f8fafc; /* Slate 50 */
+      --bs-border-radius: 0.5rem;
+      --bs-font-sans-serif: 'Poppins', sans-serif;
+    }
+    body { background-color: var(--bs-body-bg); font-family: var(--bs-font-sans-serif); }
+    .main-header { border-bottom: 1px solid var(--bs-border-color); }
+
+    .searchable-dropdown .dropdown-menu-custom {
+      display: none; position: absolute; width: 100%;
+      background-color: white; border: 1px solid var(--bs-border-color);
+      border-radius: var(--bs-border-radius); margin-top: 0.25rem;
+      box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1); z-index: 1000;
+      max-height: 250px; overflow-y: auto; opacity: 0;
+      transform: translateY(-10px);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+    .searchable-dropdown .dropdown-menu-custom.show { display: block; opacity: 1; transform: translateY(0); }
+    .dropdown-menu-custom .dropdown-item { cursor: pointer; padding: 0.5rem 1rem; }
+    .dropdown-menu-custom .filter-input { border: none; border-bottom: 1px solid var(--bs-border-color); border-radius: 0; }
+    .dropdown-menu-custom .filter-input:focus { box-shadow: none; }
+    
+    #jadwal-grid { opacity: 0; transition: opacity 0.5s ease-in-out; }
+    #jadwal-grid.visible { opacity: 1; }
+    .jadwal-card {
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      border: 1px solid var(--bs-border-color); height: 100%;
+    }
+    .jadwal-card:hover { transform: translateY(-5px); box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1) !important; }
+
+    .card-body { transition: background-color 0.3s ease; }
+    .status-hadir { background-color: rgba(25, 135, 84, 0.05); }
+    .status-izin { background-color: rgba(255, 193, 7, 0.1); }
+    .status-sakit { background-color: rgba(13, 202, 240, 0.1); }
+    .status-alfa { background-color: rgba(220, 53, 69, 0.05); }
+
+    .btn-check:checked+.btn { font-weight: 600; }
+    .btn-check[value="Hadir"]:checked + .btn-outline-secondary { background-color: var(--bs-success); color: white; border-color: var(--bs-success); }
+    .btn-check[value="Izin"]:checked + .btn-outline-secondary { background-color: var(--bs-warning); color: black; border-color: var(--bs-warning); }
+    .btn-check[value="Sakit"]:checked + .btn-outline-secondary { background-color: var(--bs-info); color: white; border-color: var(--bs-info); }
+    .btn-check[value="Alfa"]:checked + .btn-outline-secondary { background-color: var(--bs-danger); color: white; border-color: var(--bs-danger); }
+
+    .summary-badge { font-size: 0.9rem; padding: 0.5em 0.75em; }
+
+    /* Styling untuk area lampiran */
+    .file-name-display {
+      max-width: 150px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      vertical-align: middle;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container position-fixed bottom-0 end-0 p-3">
+    <div id="save-toast" class="toast align-items-center text-bg-dark border-0" role="alert" aria-live="assertive" aria-atomic="true">
+      <div class="d-flex">
+        <div class="toast-body"><i class="bi bi-check-circle-fill me-2"></i>Data tersimpan otomatis.</div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="container my-4 my-sm-5">
+    <!-- Header -->
+    <header class="d-flex flex-column flex-sm-row justify-content-between align-items-center pb-3 mb-4 main-header">
+      <h1 class="h3 fw-bold text-slate-800 mb-2 mb-sm-0"><i class="bi bi-calendar3-week me-2"></i>Absensi Per Jam Pelajaran</h1>
+      <p class="text-muted small mb-0"><i class="bi bi-clock me-1"></i><span id="tanggal-lengkap"></span></p>
+    </header>
+
+    <!-- Pilih Kelas + Jurusan -->
+    <div class="searchable-dropdown mb-4">
+      <label for="search-input" class="form-label fw-semibold">Pilih Kelas & Jurusan</label>
+      <input id="search-input" type="text" placeholder="Klik untuk memilih atau cari kelas..." class="form-control form-control-lg" readonly style="cursor: pointer;"/>
+      <div id="dropdown-list" class="dropdown-menu-custom">
+        <input id="filter-input" type="text" placeholder="Cari kelas..." class="form-control filter-input p-2 mb-1" />
+        <div id="options-container"></div>
+      </div>
+    </div>
+
+    <!-- Grid Jadwal -->
+    <div id="jadwal-grid" class="d-none">
+      <h2 id="judul-jadwal" class="h4 fw-semibold mb-4 text-slate-800"></h2>
+      <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-4" id="grid-container"></div>
+      
+      <!-- Ringkasan & Tombol Aksi -->
+      <div class="mt-4 pt-4 border-top">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
+          <div id="summary-container" class="d-flex flex-wrap gap-2 justify-content-center">
+            <span class="badge text-bg-success summary-badge"><i class="bi bi-check-circle me-1"></i> Hadir: <span id="summary-hadir">0</span></span>
+            <span class="badge text-bg-warning summary-badge"><i class="bi bi-exclamation-triangle me-1"></i> Izin: <span id="summary-izin">0</span></span>
+            <span class="badge text-bg-info summary-badge"><i class="bi bi-bandaid me-1"></i> Sakit: <span id="summary-sakit">0</span></span>
+            <span class="badge text-bg-danger summary-badge"><i class="bi bi-x-circle me-1"></i> Alfa: <span id="summary-alfa">0</span></span>
+          </div>
+          <div class="d-flex gap-2">
+            <button id="export-button" class="btn btn-outline-secondary"><i class="bi bi-download me-2"></i>Ekspor CSV</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const daftarKelasJurusan = ["X RPL", "XI RPL", "XII RPL", "X TKJ", "XI TKJ", "XII TKJ", "X AKL", "XI AKL", "XII AKL"];
+        const jadwalData = {
+          "X RPL": [ { jam: 1, guru: "Budi Santoso", mapel: "PBO" }, { jam: 2, guru: "Budi Santoso", mapel: "PBO" }, { jam: 3, guru: "Dewi Lestari", mapel: "B. Inggris" }, { jam: 4, guru: "Andi Wijaya", mapel: "Basis Data" }, { jam: 5, guru: "Andi Wijaya", mapel: "Basis Data" }, { jam: 6, guru: "Tono Prasetyo", mapel: "PKK" }, { jam: 7, guru: "Siti Rahma", mapel: "Agama" }, { jam: 8, guru: "Siti Rahma", mapel: "Agama" }, { jam: 9, guru: "Budi Santoso", mapel: "PBO" }],
+          "XI TKJ": [ { jam: 1, guru: "Herman Susilo", mapel: "Teknologi Jaringan" }, { jam: 2, guru: "Herman Susilo", mapel: "Teknologi Jaringan" }, { jam: 3, guru: "Dewi Lestari", mapel: "B. Inggris" }, { jam: 4, guru: "Rina Marlina", mapel: "ASJ" }, { jam: 5, guru: "Rina Marlina", mapel: "ASJ" }, { jam: 6, guru: "Tono Prasetyo", mapel: "PKK" }, { jam: 7, guru: "Siti Rahma", mapel: "Agama" } ]
+        };
+        
+        const searchInput = document.getElementById("search-input");
+        const dropdownList = document.getElementById("dropdown-list");
+        const filterInput = document.getElementById("filter-input");
+        const optionsContainer = document.getElementById("options-container");
+        const jadwalGrid = document.getElementById("jadwal-grid");
+        const gridContainer = document.getElementById("grid-container");
+        const judulJadwal = document.getElementById("judul-jadwal");
+        const toast = new bootstrap.Toast(document.getElementById('save-toast'), { delay: 2000 });
+        const todayDateString = new Date().toISOString().slice(0, 10);
+
+        document.getElementById("tanggal-lengkap").textContent = new Date().toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+        
+        const getStorageKey = (kelas) => `absensiPelajaran-${kelas.replace(/\s+/g, '_')}-${todayDateString}`;
+
+        const saveData = (kelas) => {
+            const dataToSave = {};
+            gridContainer.querySelectorAll('.jadwal-card').forEach(card => {
+                const jam = card.dataset.jam;
+                const status = card.querySelector('input[type="radio"]:checked').value;
+                const keterangan = card.querySelector('.keterangan').value;
+                const lampiran = card.querySelector('.file-name-display').textContent;
+                dataToSave[jam] = { status, keterangan, lampiran };
+            });
+            localStorage.setItem(getStorageKey(kelas), JSON.stringify(dataToSave));
+            toast.show();
+        };
+        
+        const loadData = (kelas) => {
+            const savedData = JSON.parse(localStorage.getItem(getStorageKey(kelas))) || {};
+            gridContainer.querySelectorAll('.jadwal-card').forEach(card => {
+                const jam = card.dataset.jam;
+                if (savedData[jam]) {
+                    const { status, keterangan, lampiran } = savedData[jam];
+                    const radio = card.querySelector(`input[value="${status}"]`);
+                    if (radio) radio.checked = true;
+                    card.querySelector('.keterangan').value = keterangan;
+                    if (lampiran) {
+                        card.querySelector('.file-name-display').textContent = lampiran;
+                        card.querySelector('.file-remove-btn').classList.remove('d-none');
+                    }
+                    updateCardUI(card.querySelector('.btn-check:checked'));
+                }
+            });
+            updateSummary();
+        };
+
+        function updateCardUI(element) {
+            if (!element) return;
+            const cardBody = element.closest('.card-body');
+            const keteranganInput = cardBody.querySelector('.keterangan');
+            const lampiranArea = cardBody.querySelector('.attachment-area');
+            const fileNameDisplay = cardBody.querySelector('.file-name-display');
+            const fileRemoveBtn = cardBody.querySelector('.file-remove-btn');
+            
+            cardBody.className = 'card-body';
+            const statusMap = { "Hadir": "status-hadir", "Izin": "status-izin", "Sakit": "status-sakit", "Alfa": "status-alfa" };
+            cardBody.classList.add(statusMap[element.value]);
+            
+            if (element.value !== 'Hadir') {
+                keteranganInput.classList.remove('d-none');
+                lampiranArea.classList.remove('d-none');
+            } else {
+                keteranganInput.classList.add('d-none');
+                lampiranArea.classList.add('d-none');
+                // Hapus lampiran jika status kembali ke Hadir
+                cardBody.querySelector('.attachment-input').value = '';
+                fileNameDisplay.textContent = '';
+                fileRemoveBtn.classList.add('d-none');
+            }
+        }
+        
+        function populateDropdown() {
+            optionsContainer.innerHTML = '';
+            daftarKelasJurusan.forEach(kj => {
+                const optionEl = document.createElement("div");
+                optionEl.textContent = kj;
+                optionEl.className = "dropdown-item";
+                optionEl.addEventListener("click", () => { searchInput.value = kj; closeDropdown(); tampilkanJadwal(kj); });
+                optionsContainer.appendChild(optionEl);
+            });
+        }
+
+        function filterOptions(keyword) {
+            optionsContainer.querySelectorAll(".dropdown-item").forEach(option => {
+                option.style.display = option.textContent.toLowerCase().includes(keyword.toLowerCase()) ? "block" : "none";
+            });
+        }
+
+        function openDropdown() { dropdownList.classList.add("show"); filterInput.value = ''; filterOptions(''); setTimeout(() => filterInput.focus(), 100); }
+        function closeDropdown() { dropdownList.classList.remove("show"); }
+
+        searchInput.addEventListener("click", () => { dropdownList.classList.contains("show") ? closeDropdown() : openDropdown(); });
+        filterInput.addEventListener("input", e => filterOptions(e.target.value));
+        document.addEventListener("click", e => { if (!searchInput.contains(e.target) && !dropdownList.contains(e.target)) closeDropdown(); });
+
+        function tampilkanJadwal(kelasJurusan) {
+            const data = jadwalData[kelasJurusan] || [];
+            gridContainer.innerHTML = "";
+            judulJadwal.innerHTML = `<i class="bi bi-table me-2"></i>Jadwal Kelas ${kelasJurusan}`;
+            jadwalGrid.classList.remove('d-none');
+            setTimeout(() => jadwalGrid.classList.add("visible"), 10);
+            
+            if (data.length === 0) {
+              gridContainer.innerHTML = `<div class="col-12"><div class="alert alert-warning">Belum ada data jadwal untuk kelas ${kelasJurusan}.</div></div>`;
+              return;
+            }
+
+            data.forEach(item => {
+                const col = document.createElement("div");
+                col.className = "col";
+                col.innerHTML = `
+                    <div class="card shadow-sm jadwal-card" data-jam="${item.jam}" data-guru="${item.guru}" data-mapel="${item.mapel}">
+                        <div class="card-body status-hadir">
+                            <h6 class="card-subtitle text-muted mb-2">Jam ke-${item.jam}</h6>
+                            <p class="mb-1"><i class="bi bi-person-fill text-muted me-2"></i><span class="fw-semibold">${item.guru}</span></p>
+                            <p class="mb-3 small text-muted"><i class="bi bi-book text-muted me-2"></i>${item.mapel}</p>
+                            <div class="btn-group w-100 mb-2" role="group">
+                                <input type="radio" class="btn-check" name="status-jam-${item.jam}" id="status-${item.jam}-hadir" value="Hadir" autocomplete="off" checked>
+                                <label class="btn btn-sm btn-outline-secondary" for="status-${item.jam}-hadir">Hadir</label>
+                                <input type="radio" class="btn-check" name="status-jam-${item.jam}" id="status-${item.jam}-izin" value="Izin" autocomplete="off">
+                                <label class="btn btn-sm btn-outline-secondary" for="status-${item.jam}-izin">Izin</label>
+                                <input type="radio" class="btn-check" name="status-jam-${item.jam}" id="status-${item.jam}-sakit" value="Sakit" autocomplete="off">
+                                <label class="btn btn-sm btn-outline-secondary" for="status-${item.jam}-sakit">Sakit</label>
+                                <input type="radio" class="btn-check" name="status-jam-${item.jam}" id="status-${item.jam}-alfa" value="Alfa" autocomplete="off">
+                                <label class="btn btn-sm btn-outline-secondary" for="status-${item.jam}-alfa">Alfa</label>
+                            </div>
+                            <input type="text" class="form-control form-control-sm keterangan d-none mt-2" placeholder="Tulis keterangan..." />
+                            
+                            <!-- Area Lampiran -->
+                            <div class="attachment-area d-none mt-2">
+                                <input type="file" class="d-none attachment-input" id="file-${item.jam}">
+                                <label for="file-${item.jam}" class="btn btn-sm btn-outline-primary w-100"><i class="bi bi-paperclip me-2"></i>Tambah Lampiran</label>
+                                <div class="d-flex align-items-center mt-2">
+                                  <span class="file-name-display text-muted small"></span>
+                                  <button class="btn-close btn-sm file-remove-btn d-none ms-auto" aria-label="Hapus file"></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                gridContainer.appendChild(col);
+            });
+            setupCardInteractions();
+            loadData(kelasJurusan);
+        }
+
+        function setupCardInteractions() {
+            let debounceTimer;
+            const triggerSave = () => {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => {
+                    saveData(searchInput.value);
+                }, 500);
+            };
+
+            gridContainer.querySelectorAll(".btn-check").forEach(el => {
+                el.addEventListener("input", (e) => {
+                    updateCardUI(e.target);
+                    updateSummary();
+                    triggerSave();
+                });
+            });
+
+            gridContainer.querySelectorAll(".keterangan").forEach(el => {
+                el.addEventListener("input", triggerSave);
+            });
+
+            gridContainer.querySelectorAll('.attachment-input').forEach(input => {
+                input.addEventListener('change', (e) => {
+                    const file = e.target.files[0];
+                    const cardBody = e.target.closest('.card-body');
+                    const fileNameDisplay = cardBody.querySelector('.file-name-display');
+                    const fileRemoveBtn = cardBody.querySelector('.file-remove-btn');
+                    if (file) {
+                        fileNameDisplay.textContent = file.name;
+                        fileRemoveBtn.classList.remove('d-none');
+                    }
+                    triggerSave();
+                });
+            });
+
+            gridContainer.querySelectorAll('.file-remove-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const cardBody = e.target.closest('.card-body');
+                    cardBody.querySelector('.attachment-input').value = '';
+                    cardBody.querySelector('.file-name-display').textContent = '';
+                    e.target.classList.add('d-none');
+                    triggerSave();
+                });
+            });
+        }
+
+        function updateSummary() {
+            const summary = { Hadir: 0, Izin: 0, Sakit: 0, Alfa: 0 };
+            gridContainer.querySelectorAll('input[type="radio"]:checked').forEach(radio => summary[radio.value]++);
+            document.getElementById('summary-hadir').textContent = summary.Hadir;
+            document.getElementById('summary-izin').textContent = summary.Izin;
+            document.getElementById('summary-sakit').textContent = summary.Sakit;
+            document.getElementById('summary-alfa').textContent = summary.Alfa;
+        }
+
+        function exportToCSV() {
+            const kelasJurusan = searchInput.value;
+            if (!kelasJurusan) { alert("Silakan pilih kelas terlebih dahulu."); return; }
+            let csvContent = "data:text/csv;charset=utf-8,";
+            csvContent += ["Jam", "Guru", "Mata Pelajaran", "Status", "Keterangan", "Lampiran"].join(",") + "\r\n";
+            gridContainer.querySelectorAll(".jadwal-card").forEach(card => {
+                const status = card.querySelector('input[type="radio"]:checked')?.value || 'Belum diisi';
+                const keterangan = `"${card.querySelector(".keterangan").value}"`;
+                const lampiran = `"${card.querySelector(".file-name-display").textContent}"`;
+                const row = [card.dataset.jam, `"${card.dataset.guru}"`, `"${card.dataset.mapel}"`, status, keterangan, lampiran].join(",");
+                csvContent += row + "\r\n";
+            });
+            const link = document.createElement("a");
+            link.setAttribute("href", encodeURI(csvContent));
+            link.setAttribute("download", `absensi_per_jam_${kelasJurusan.replace(" ", "_")}_${todayDateString}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        document.getElementById("export-button").addEventListener("click", exportToCSV);
+        
+        populateDropdown();
+        const defaultKelas = daftarKelasJurusan[0];
+        if (defaultKelas) {
+            searchInput.value = defaultKelas;
+            tampilkanJadwal(defaultKelas);
+        }
+    });
+  </script>
+</body>
+</html>

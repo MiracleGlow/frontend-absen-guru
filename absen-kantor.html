@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Absensi Kehadiran Guru (Kantor)</title>
+
+  <!-- Bootstrap 5.3 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+  
+  <!-- Bootstrap Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+  <!-- Google Fonts: Poppins -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bs-primary-rgb: 67, 56, 202; /* Indigo */
+      --bs-body-bg: #f8fafc; /* Slate 50 */
+      --bs-border-radius: 0.5rem;
+      --bs-font-sans-serif: 'Poppins', sans-serif;
+    }
+
+    body { background-color: var(--bs-body-bg); font-family: var(--bs-font-sans-serif); }
+    .table { border-color: #e2e8f0; }
+    .table tr { transition: background-color 0.3s ease, opacity 0.3s ease; }
+    
+    .table .status-hadir { background-color: rgba(34, 197, 94, 0.05); }
+    .table .status-sakit { background-color: rgba(59, 130, 246, 0.07); }
+    .table .status-izin { background-color: rgba(249, 115, 22, 0.07); }
+    .table .status-alpa { background-color: rgba(239, 68, 68, 0.05); }
+
+    .btn-check:checked+.btn { transform: scale(1.05); box-shadow: 0 0 0 2px var(--bs-body-bg), 0 0 0 4px var(--bs-primary); }
+    .btn-status {
+      transition: all 0.2s ease-in-out; border-radius: 50px !important; width: 40px; height: 40px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .btn-status .icon-text { display: none; }
+    
+    .timeliness-status { font-weight: 500; font-size: 0.8rem; }
+    .status-tepat { color: var(--bs-success); }
+    .status-terlambat { color: var(--bs-danger); }
+    
+    .toast { font-size: 0.9rem; }
+    
+    @media (min-width: 576px) {
+      .btn-status { width: auto; padding-left: 1rem; padding-right: 1rem; }
+      .btn-status .icon-text { display: inline; margin-left: 0.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container position-fixed bottom-0 end-0 p-3">
+    <div id="save-toast" class="toast align-items-center text-bg-primary border-0" role="alert" aria-live="assertive" aria-atomic="true">
+      <div class="d-flex">
+        <div class="toast-body"><i class="bi bi-check-circle-fill me-2"></i>Data tersimpan otomatis.</div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="container my-4 my-sm-5">
+    <!-- Header -->
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-center pb-3 mb-4 border-bottom">
+      <div>
+        <h1 class="h3 fw-bold mb-1">📝 Absensi Kehadiran Guru</h1>
+        <p class="text-muted mb-2 mb-md-0">Pencatatan kehadiran guru harian di kantor.</p>
+      </div>
+      <div class="d-flex align-items-center gap-3">
+        <label for="date-picker" class="form-label mb-0 fw-medium">Tanggal:</label>
+        <input type="date" class="form-control" id="date-picker" style="width: auto;">
+      </div>
+    </div>
+
+    <!-- Controls: Jam Masuk dan Search -->
+    <div class="row g-3 mb-3 align-items-center">
+        <div class="col-md-4">
+            <label for="jam-masuk-standar" class="form-label fw-medium">Jam Masuk Standar:</label>
+            <input type="time" class="form-control" id="jam-masuk-standar" value="07:00">
+        </div>
+        <div class="col-md-8">
+            <label for="search-input" class="form-label fw-medium">Cari Guru:</label>
+            <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-search"></i></span>
+                <input type="text" class="form-control" placeholder="Ketik nama untuk memfilter..." id="search-input">
+            </div>
+        </div>
+    </div>
+    
+    <!-- Attendance Table -->
+    <main class="card shadow-sm border-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th scope="col" style="width: 5%;">No.</th>
+                        <th scope="col">Nama Guru</th>
+                        <th scope="col" style="width: 40%;">Status Kehadiran</th>
+                        <th scope="col">Waktu / Keterangan</th>
+                    </tr>
+                </thead>
+                <tbody id="teacher-table-body">
+                    <!-- Rows will be generated by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const daftarGuru = [
+            { id: 1, nama: "Dr. Budi Santoso, M.Pd." }, { id: 2, nama: "Siti Rahmawati, S.Kom." }, { id: 3, nama: "Andi Wijaya, S.T." }, { id: 4, nama: "Dewi Lestari, S.S." }, { id: 5, nama: "Herman Susilo, M.Kom." }, { id: 6, nama: "Rina Marlina, S.E." }, { id: 7, nama: "Tono Prasetyo, S.Pd." }, { id: 8, nama: "Putri Anggraini, M.Sc." }
+        ];
+
+        const tableBody = document.getElementById('teacher-table-body');
+        const datePicker = document.getElementById('date-picker');
+        const searchInput = document.getElementById('search-input');
+        const standardTimeInput = document.getElementById('jam-masuk-standar');
+        const toast = new bootstrap.Toast(document.getElementById('save-toast'), { delay: 2000 });
+
+        const timeToMinutes = (timeStr) => {
+            if (!timeStr) return 0;
+            const [hours, minutes] = timeStr.split(':').map(Number);
+            return hours * 60 + minutes;
+        };
+
+        const updateTimelinessStatus = (tr) => {
+            const statusEl = tr.querySelector('.timeliness-status');
+            const timeInput = tr.querySelector('.waktu-hadir');
+            const statusHadir = tr.querySelector('input[value="Hadir"]:checked');
+
+            if (!statusHadir) { statusEl.textContent = ''; return; }
+
+            const standardMinutes = timeToMinutes(standardTimeInput.value);
+            const actualMinutes = timeToMinutes(timeInput.value);
+            const difference = actualMinutes - standardMinutes;
+
+            statusEl.className = 'timeliness-status';
+            if (difference > 0) {
+                statusEl.textContent = `Terlambat ${difference} menit`;
+                statusEl.classList.add('status-terlambat');
+            } else {
+                statusEl.textContent = 'Tepat Waktu';
+                statusEl.classList.add('status-tepat');
+            }
+        };
+
+        const renderTable = () => {
+            tableBody.innerHTML = '';
+            daftarGuru.forEach((guru, index) => {
+                const tr = document.createElement('tr');
+                tr.setAttribute('data-teacher-id', guru.id);
+                tr.setAttribute('data-teacher-name', guru.nama.toLowerCase());
+                tr.innerHTML = `
+                    <td class="align-middle fw-medium text-muted">${index + 1}</td>
+                    <td class="align-middle">
+                        <span class="fw-medium">${guru.nama}</span><br>
+                        <small class="timeliness-status"></small>
+                    </td>
+                    <td class="align-middle">
+                        <div class="btn-group gap-1 gap-sm-2" role="group">
+                            <input type="radio" class="btn-check" name="status-${guru.id}" id="hadir-${guru.id}" value="Hadir" autocomplete="off">
+                            <label class="btn btn-outline-success btn-status" for="hadir-${guru.id}" title="Hadir"><i class="bi bi-check-circle"></i><span class="icon-text">Hadir</span></label>
+                            <input type="radio" class="btn-check" name="status-${guru.id}" id="sakit-${guru.id}" value="Sakit" autocomplete="off">
+                            <label class="btn btn-outline-primary btn-status" for="sakit-${guru.id}" title="Sakit"><i class="bi bi-bandaid"></i><span class="icon-text">Sakit</span></label>
+                            <input type="radio" class="btn-check" name="status-${guru.id}" id="izin-${guru.id}" value="Izin" autocomplete="off">
+                            <label class="btn btn-outline-warning btn-status" for="izin-${guru.id}" title="Izin"><i class="bi bi-calendar-event"></i><span class="icon-text">Izin</span></label>
+                            <input type="radio" class="btn-check" name="status-${guru.id}" id="alpa-${guru.id}" value="Alpa" autocomplete="off">
+                            <label class="btn btn-outline-danger btn-status" for="alpa-${guru.id}" title="Alpa"><i class="bi bi-x-circle"></i><span class="icon-text">Alpa</span></label>
+                        </div>
+                    </td>
+                    <td class="align-middle">
+                        <input type="time" class="form-control form-control-sm detail-input waktu-hadir d-none" value="07:00">
+                        <input type="text" class="form-control form-control-sm detail-input keterangan d-none" placeholder="Opsional...">
+                    </td>
+                `;
+                tableBody.appendChild(tr);
+            });
+            attachEventListeners();
+            loadDataForDate();
+        };
+
+        const attachEventListeners = () => {
+            tableBody.querySelectorAll('.btn-check, .detail-input').forEach(input => {
+                let debounceTimer;
+                input.addEventListener('input', (e) => {
+                    const tr = e.target.closest('tr');
+                    if (e.target.matches('.btn-check')) handleStatusChange(e.target);
+                    if (e.target.matches('.waktu-hadir')) updateTimelinessStatus(tr);
+                    
+                    clearTimeout(debounceTimer);
+                    debounceTimer = setTimeout(() => { saveData(e.target); }, 500);
+                });
+            });
+        };
+
+        const handleStatusChange = (element) => {
+            const tr = element.closest('tr');
+            const waktuInput = tr.querySelector('.waktu-hadir');
+            const keteranganInput = tr.querySelector('.keterangan');
+            tr.className = '';
+            const statusMap = { 'Hadir': 'hadir', 'Sakit': 'sakit', 'Izin': 'izin', 'Alpa': 'alpa' };
+            tr.classList.add(`status-${statusMap[element.value]}`);
+            if (element.value === 'Hadir') {
+                waktuInput.classList.remove('d-none');
+                keteranganInput.classList.add('d-none');
+            } else {
+                waktuInput.classList.add('d-none');
+                keteranganInput.classList.remove('d-none');
+            }
+            updateTimelinessStatus(tr);
+        };
+
+        const getStorageKey = () => `absensiKantor-${datePicker.value}`;
+
+        const saveData = (element) => {
+            const tr = element.closest('tr');
+            const teacherId = tr.dataset.teacherId;
+            const status = tr.querySelector('input[type="radio"]:checked')?.value || null;
+            if (!status) return;
+            const detail = status === 'Hadir' ? tr.querySelector('.waktu-hadir').value : tr.querySelector('.keterangan').value;
+            let dataForDate = JSON.parse(localStorage.getItem(getStorageKey())) || {};
+            dataForDate[teacherId] = { status, detail };
+            localStorage.setItem(getStorageKey(), JSON.stringify(dataForDate));
+            toast.show();
+        };
+
+        const loadDataForDate = () => {
+            const dataForDate = JSON.parse(localStorage.getItem(getStorageKey())) || {};
+            tableBody.querySelectorAll('tr').forEach(tr => {
+                const teacherId = tr.dataset.teacherId;
+                const savedData = dataForDate[teacherId];
+                const status = savedData ? savedData.status : 'Hadir';
+                const detail = savedData ? savedData.detail : '07:00';
+                const radio = tr.querySelector(`input[value="${status}"]`);
+                if (radio) {
+                    radio.checked = true;
+                    handleStatusChange(radio);
+                }
+                if (status === 'Hadir') {
+                    tr.querySelector('.waktu-hadir').value = detail;
+                } else {
+                    tr.querySelector('.keterangan').value = detail;
+                }
+                updateTimelinessStatus(tr);
+            });
+            applySearchFilter();
+        };
+        
+        const applySearchFilter = () => {
+            const searchTerm = searchInput.value.toLowerCase();
+            tableBody.querySelectorAll('tr').forEach(tr => {
+                const teacherName = tr.dataset.teacherName;
+                const matchesSearch = teacherName.includes(searchTerm);
+                tr.style.display = matchesSearch ? '' : 'none';
+            });
+        };
+
+        const initialize = () => {
+            datePicker.value = new Date().toISOString().split('T')[0];
+            renderTable();
+            
+            datePicker.addEventListener('change', renderTable);
+            searchInput.addEventListener('input', applySearchFilter);
+            standardTimeInput.addEventListener('input', () => {
+                tableBody.querySelectorAll('tr').forEach(updateTimelinessStatus);
+            });
+        };
+
+        initialize();
+    });
+  </script>
+</body>
+</html>
